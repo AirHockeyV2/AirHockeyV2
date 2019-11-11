@@ -1,0 +1,1 @@
+./Debug/strategie.cpp.o ./Debug/puck.cpp.o ./Debug/striker.cpp.o ./Debug/up_V2_main.cpp.o ./Debug/grafik.cpp.o ./Debug/i2cControl.cpp.o ./Debug/lcdDriver.cpp.o ./Debug/strategieTest.cpp.o ./Debug/pi2c.cpp.o
