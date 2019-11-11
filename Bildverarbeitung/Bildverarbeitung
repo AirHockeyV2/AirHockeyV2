@@ -1,0 +1,252 @@
+#include <opencv2/opencv.hpp>
+#include <iostream>
+#include <cmath>
+#include <chrono>
+#include <ctime>
+#include <raspicam/raspicam_cv.h>
+#include <thread>
+
+
+using namespace std;
+using namespace cv;
+
+float Geschw(float tdelta, float posalt, float posneu)
+{
+	float v;
+	v = abs(posneu - posalt) / (tdelta);
+	std::cout << "In Funktion Geschw: v ist " << v << endl;
+	return(v);
+}
+
+//Eingangsgrößen aus Foto
+float xpix;
+float ypix;
+long long tneu;
+
+//Vorgegebene Größen
+const float rpuck = 19.5; //Festlegen je nach Größe des Pucks 
+
+//Positionsvariablen
+float xalt;
+float yalt;
+float xneu;
+float yneu;
+
+//Geschwindikeitsvariablen
+float vxalt;
+float vyalt;
+float vxneu;
+float vyneu;
+
+//Zeitangaben
+long long talt;
+int tdelta;
+
+//Für Picamera
+raspicam::RaspiCam_Cv Camera; //Definiert, wie Kamera genannt
+cv::Mat CapturedImage;  //Bild mit Opencv
+
+int main()
+{
+	//Parameter: BEFORE open camera)
+	Camera.set(CV_CAP_PROP_FORMAT, CV_8UC3);
+	//CV_8UC1 is greyscale image or CV_8UC3 is RGB image
+
+	//Open camera
+	cout << "Opening Camera..." << endl;
+	if (!Camera.open())
+	{
+		cerr << "Error opening the camera" << endl; //cerr: standard error stream für char
+		return -1;
+	}
+
+	//wait a while until camera stabilizes
+	cout << "Sleeping for 3 secs" << endl;
+	//this_thread::sleep_for(chrono::milliseconds(3000));
+
+	//Parameter: AFTER Camera is opened, Eigenschaften aus raspicam_cv.h
+	Camera.set(CV_CAP_PROP_FRAME_WIDTH, 1200);
+	Camera.set(CV_CAP_PROP_FRAME_HEIGHT, 640);
+	Camera.set(CV_CAP_PROP_FPS, 30); //Funktioniert bisher nur mit 30
+	
+	//z.B. wenn Bild zu dunkel:
+	//Camera.set(CV_CAP_PROP_GAIN, 50); //50
+	//Camera.set(CV_CAP_PROP_EXPOSURE, -1); //50
+	//Camera.set(CV_CAP_PROP_WHITE_BALANCE_RED_V, -1); //50
+	//Camera.set(CV_CAP_PROP_WHITE_BALANCE_BLUE_U, -1); //50
+
+	//Alle Eigenschaften aus raspicam_cv.h, SET wenn nötig 
+	//CV_CAP_PROP_FRAME_WIDTH
+	//CV_CAP_PROP_FRAME_HEIGHT
+	//CV_CAP_PROP_FPS
+	//CV_CAP_PROP_FORMAT: CV_8UC1 or CV_8UC3 
+	//CV_CAP_PROP_BRIGHTNESS : [0, 100]
+	//CV_CAP_PROP_CONTRAST : [0, 100]
+	//CV_CAP_PROP_SATURATION : [0, 100]
+	//CV_CAP_PROP_GAIN : (iso) : [0, 100]
+	//CV_CAP_PROP_EXPOSURE : -1 auto.[1, 100] shutter speed from 0 to 33ms
+	//CV_CAP_PROP_WHITE_BALANCE_RED_V : [1, 100] - 1 auto whitebalance
+	//CV_CAP_PROP_WHITE_BALANCE_BLUE_U : [1, 100] - 1 auto whitebalance
+
+//Schleife, sodass dauerhaft Bilder gemacht werden 
+for (int status=1; status<4;status++) //Bisher nur 3x //Ändern in a > 0 oder while schleife
+
+{
+	cout <<"Loop Nr." << status << endl;
+
+	//Startet Bild
+		Camera.grab();
+		Camera.retrieve(CapturedImage);
+
+	//speichert bild unter spezifischem Namen 
+	cv::imwrite("newimage1.jpg", CapturedImage);
+	cout << "Image saved at newimage1.jpg" << endl;
+	
+	//Hiermit könnte ein spezifisches Bild ausgelesen werden
+	//Mat imgOriginal; 
+	//imgOriginal = imread("newimage1.jpg", IMREAD_COLOR); 
+
+	//Konvertierung des Bildes
+	Mat hsvImg;    // HSV Image
+	Mat threshImg;   // Thresh Image
+	cvtColor(CapturedImage, hsvImg, cv::COLOR_BGR2HSV); // Convert Original Image to HSV Image
+	cv::imwrite("newimageHSV.jpg", hsvImg);
+
+	//HSV - Farbspezifisch anpassen.
+	//Diese Werte müssen bei anderen Lichtverhältnissen angepasst werden
+	int lowH = 0;       // Set Hue (Gelb) 				//15	0
+	int highH = 5;										//45	5
+	int lowS = 150;       // Set Saturation (Gelb)		//80	150
+	int highS = 255;									//255	255
+	int lowV = 150;       // Set Value (Gelb)			//80	150
+	int highV = 255;									//255	255
+
+	inRange(hsvImg, Scalar(lowH, lowS, lowV), Scalar(highH, highS, highV), threshImg);
+	dilate(threshImg, threshImg, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+	erode(threshImg, threshImg, getStructuringElement(MORPH_ELLIPSE, Size(5, 5)));
+	cv::imwrite("newimageBW.jpg", threshImg);
+
+	//KOORDINATENBERECHNUNG
+	Moments oMoments = moments(threshImg);
+	double dM01 = oMoments.m01;
+	double dM10 = oMoments.m10;
+	double dArea = oMoments.m00;
+
+	xpix = dM10 / dArea;
+	ypix = dM01 / dArea;
+
+	//AB HIER IST KOORDINATENVERWERTUNG	
+
+	std::cout << "Von Kamera gesendete Daten: xpix in Pixel: " << xpix << ", ypix in Pixel: " << ypix << endl; 
+
+	//Timestamp
+	long long tneu = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+	std::cout << tneu << std::endl;
+
+	//1. Schritt: Pixelkoordinate in x/y-Koordinate umrechnen 
+	//Umrechnen auf 800x400, Anpassen an Koordinatensystem
+	float xneu = (xpix) / 680 * 400;
+	float yneu = (ypix) / 1200 * 800;
+	if (xpix > 680 || ypix > 1200)
+	{
+		std::cout << "Fehler, Puck in Pixeln falsch erkannt" << endl;
+		return -1; //Hier das programm beenden 
+	}
+	std::cout << "xneu in mm " << xneu << " und yneu in mm " << yneu << endl;
+
+	//erst ab zweiten LOOP Geschwindigkeit errechnen: status größer 1 
+	if (status > 1)
+	{
+		//2. Schritt: Zeitdifferenz zwischen Fotos errechnen 
+		float tdelta = tneu - talt;
+		std::cout << "Das Zeitintervall zwischen den Fotos ist: " << tdelta << endl;
+
+		//3. Schritt Geschwindigkeit aus letzter und neuer Geschwindigkeit berechnen 
+		vxneu = Geschw(tdelta, xalt, xneu);
+		vyneu = Geschw(tdelta, yalt, yneu);
+
+		std::cout << "Die alte Geschwindigkeit ist vxalt: " << vxalt << " und vyalt: " << vyalt << endl;
+		std::cout << "Die ermittelte neue Geschwindigkeit ist vxneu " << vxneu << " und vyneu " << vyneu << endl;
+
+		//4. Schritt: Checken ob Bande getroffen wurde - ob neue Geschw. korrekt 
+		std::cout << "Es wird geprueft, ob eine Bande getroffen wurde. " << endl;
+		bool bande;
+
+		float xsoll = xalt + vxalt * tdelta;
+		std::cout << "Die Sollposition mit vxalt ist " << xsoll << endl;
+		if (xsoll + rpuck >= 400 || xsoll - rpuck <= 0)
+		{
+			std::cout << "Wir treffen die Bande." << endl;
+			bande = true;
+		}
+		else
+		{
+			std::cout << "Kein Bandencheck notwendig" << endl;
+			bande = false;
+		}
+
+		//5. Schritt: Wenn Bandentreff, den Bandentreffpunkt als alte Position nutzen
+		if (bande == true)
+		{
+			//Abstand Von Punkt bis Bande : xab UND x-position des Trefferpunktes: xb
+			float xab; float xb;
+			if (vxalt > 0)
+			{
+				xab = 400 - xalt - rpuck;
+				xb = 400 - rpuck;
+			}
+			else
+			{
+				xab = xalt - rpuck;
+				xb = rpuck;
+			}
+			std::cout << "Der Abstand von der alten Position des Puck zur Bande ist " << xab << endl;
+			std::cout << "Die Bande wird mit Mittelpunkt des Pucks in x = " << xb << " getroffen." << endl;
+
+			//Wie viel Zeit von alter Position bis Bande : tab
+			float tab = xab / vxalt;
+			std::cout << "Die Zeit bis Bandentreff seit letztem Bild ist " << tab << endl;
+
+			//y position des Trefferpunktes : yb
+			float yb = yalt + vyalt * tab;
+			std::cout << "Die Bande wird bei y = " << yb << " getroffen." << endl;
+
+			//GESCHWINDKEIT
+			//Neuer Geschwindigkeitsvektor daraus von Bandenpunkt bis neuer Punkt:
+			float tbc = tdelta - tab;
+			std::cout << "Die Zeit, die nach Bandenberuehrung uebrig ist, ist: " << tbc << endl;
+
+			float vxneu = Geschw(tbc, xb, xneu);
+			float vyneu = Geschw(tbc, yb, yneu);
+
+			xalt = xb; yalt = yb;
+			std::cout << "Da Bande getroffen wurde, ist die alte Position nun der Bandentreffpunkt: xalt: " << xalt << " und yalt: " << yalt << endl;
+			std::cout << "Die neue Geschwindigkeit von Bandenpunkt zu neuer Position ist nun vxneu: " << vxneu << " und vyneu: " << vyneu << endl;
+
+		} //Ende If bei Bandentreff
+
+	} //Ende If, was immer ab den zweiten Foto läuft
+	
+	//Für nächstes Bild: 
+	talt = tneu;
+	xalt = xneu;
+	yalt = yneu;
+	vxalt = vxneu;
+	vyalt = vyneu;
+	
+	//Weitergabe der Daten (xweiter, yweiter, vxweiter, vyweiter) an den zweiten Pi (angepasst an das Koordinatensystem) 
+	//--> Noch zu realisieren über I2C
+	
+	float xweiter = xneu -rpuck;
+	float yweiter = yneu - rpuck;
+	float vxweiter = vxneu;
+	float vyweiter = vyneu; 
+	
+	
+} //Ende des Loops insgesamt
+
+cout << "Stop camera..." << endl;
+Camera.release();
+
+return 0;
+}
