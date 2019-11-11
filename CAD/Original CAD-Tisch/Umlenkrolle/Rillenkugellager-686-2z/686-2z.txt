@@ -1,0 +1,14 @@
+﻿"Symbol";"Value";"Unit";
+"REFERENCE";"686-2Z";"";
+"TraceParts.PartVersion";"1.0.2";"";
+"SUPPLIER";"Schaeffler Technologies AG & Co. KG";"";
+"TraceParts.PartStatus";"Published";"";
+"TraceParts.PartNumber";"33-24042019-108150";"";
+"TraceParts.PartLanguage";"de";"";
+"DESIGN";"Rillenkugellager";"";
+"TraceParts.InstanceId";"33-24042019-10815016X14V0AOQC7MJ5EW44UMF18X";"";
+"TraceParts.PartTitle";"Rillenkugellager 68..-2Z, Hauptabmessungen nach DIN 625-1, beidseitig Spaltdichtung";"";
+"TRACEPARTS";"TRACEPARTS";"";
+"TraceParts.PartStatusId";"";"";
+"SELECTION";"686-2Z";"";
+"TraceParts.ClassPath";"INAFAG:33-24042019-108150";"";
